@@ -11,8 +11,8 @@ file = open(sys.argv[1], "w")
 
 def coord(x, y):
     global resolution
-    return (int(x*resolution[0]/1280), 
-            int(y*resolution[1]/720))
+    return (int(x*resolution[0]/1280.0), 
+            int(y*resolution[1]/720.0))
 
 buy_btn = coord(965,652)
 buy_confirm_btn = coord(787,520)
