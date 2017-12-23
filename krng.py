@@ -1,18 +1,86 @@
+from __future__ import print_function
+
+import json
+import os
 import sys
 
 # If your Nox instance runs at something other than 1280x720 resolution, change this to whatever
 # it is.
 resolution = (1280,720)
 
+def do_input():
+    if sys.version_info >= (3,0):
+        return input()
+    return raw_input()
+
 # Don't change anything in this section unless you know what you're doing.
-# ================================================================================================
+# ==================================================================================================================
+def find_nox_install():
+    app_data = os.environ.get('LOCALAPPDATA', None)
+    if not app_data:
+        print('Could not get local app data folder.  Exiting...')
+        sys.exit(1)
+    nox_folder = os.path.join(app_data, 'Nox', 'record')
+    if not os.path.exists(nox_folder):
+        print('Could not find Nox installation folder.  Exiting...')
+        sys.exit(1)
+    if not os.path.exists(os.path.join(nox_folder, 'records')):
+        print('Invalid Nox installation folder.  Exiting...')
+        sys.exit(1)
+    return nox_folder
+
+def is_integer(s, min, max):
+    try:
+        n = int(s)
+        return n >= min and n <= max
+    except:
+        pass
+ 
+    return False
+
+def select_macro_interactive(json_obj):
+    if len(json_obj) == 0:
+        print('The file {0} contains no macros.  Record a dummy macro in Nox and try again.')
+        sys.exit(1)
+    index = 0
+    keys = list(json_obj.keys())
+    if len(json_obj) > 1:
+        while True:
+            for (n,key) in enumerate(keys):
+                print('{0}) {1}'.format(n+1, json_obj[key]['name']))
+            print('Enter the macro you wish to overwrite: ', end = '')
+            value = do_input()
+            if is_integer(value, 1, len(json_obj)):
+                index = int(value) - 1
+                break
+            print('Invalid entry.  Please choose a number from 1 to {0}'.format(len(json_obj)))
+    key = keys[index]
+    return key
+
+
+def get_nox_macro_interactive():
+    nox_folder = find_nox_install()
+    print('Found nox local appdata at {0}'.format(nox_folder))
+    records_file = os.path.join(nox_folder, 'records')
+    fp = open(records_file, 'r')
+    json_obj = json.load(fp)
+    macro_key = select_macro_interactive(json_obj)
+    macro_file = os.path.join(nox_folder, macro_key)
+
+    name = json_obj[macro_key]['name']
+
+    print('The macro "{0}" ({1}) will be overwritten.  Press Enter to continue, or Ctrl+C to cancel.'.format(name, macro_file), end = '')
+    do_input()
+
+    return macro_file
+
+
 time = 0
-file = open(sys.argv[1], "w")
 
 def coord(x, y):
     global resolution
-    return (int(x*resolution[0]/1280.0), 
-            int(y*resolution[1]/720.0))
+    return (int(x*resolution[0]/1280), 
+            int(y*resolution[1]/720))
 
 buy_btn = coord(965,652)
 buy_confirm_btn = coord(787,520)
@@ -36,42 +104,35 @@ def click(file, loc, wait_milliseconds):
     file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:1:0:{2}:{3}ScRiPtSePaRaToR{4}\n".format(
         resolution[0], resolution[1], loc[0], loc[1], time))
 
-    # This is the delay between pressing the button and releasing the button.  If you
-    # set it to be too fast, the device won't register a click properly.  In my
-    # experience 100ms is about as fast as you can get to have all clicks properly
-    # registered.
+    # This is the delay between pressing the button and releasing the button.  If you set it to be too fast,
+    # the device won't register a click properly.  In my experience 100ms is about as fast as you can get
+    # to have all clicks properly registered.
     wait(100)
-    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:6ScRiPtSePaRaToR{2}\n".format(
-        resolution[0], resolution[1], time))
-    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:6ScRiPtSePaRaToR{2}\n".format(
-        resolution[0], resolution[1], time))
-    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:1ScRiPtSePaRaToR{2}\n".format(
-        resolution[0], resolution[1], time))
-    file.write("0ScRiPtSePaRaToR{0}|{1}|MSBRL:-1158647:599478ScRiPtSePaRaToR{2}\n".format(
-        resolution[0], resolution[1], time))
+    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:6ScRiPtSePaRaToR{2}\n".format(resolution[0], resolution[1], time))
+    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:6ScRiPtSePaRaToR{2}\n".format(resolution[0], resolution[1], time))
+    file.write("0ScRiPtSePaRaToR{0}|{1}|MULTI:0:1ScRiPtSePaRaToR{2}\n".format(resolution[0], resolution[1], time))
+    file.write("0ScRiPtSePaRaToR{0}|{1}|MSBRL:-1158647:599478ScRiPtSePaRaToR{2}\n".format(resolution[0], resolution[1], time))
 
-    # This is the delay between finishing one click and beginning the next click.
-    # This needs to account for how fast the game can transition from one screen
-    # to the next.  For example, if you're repeatedly clicking a buy button with the
-    # game not really doing anything between each click, this can be very low.  On
-    # the other hand, if a click causes the game to transition from one screen to
-    # another (e.g. using a portal and the game having to load into Orvel and load an
-    # entirely new area) then it should be fairly high because you don't want the next
-    # click to happen while the game is still transitioning.
+    # This is the delay between finishing one click and beginning the next click.  This needs to account
+    # for how fast the game can transition from one screen to the next.  For example, if you're repeatedly
+    # clicking a buy button with the game not really doing anything between each click, this can be very
+    # low.  On the other hand, if a click causes the game to transition from one screen to another (e.g.
+    # using a portal and the game having to load into Orvel and load an entirely new area) then it should
+    # be fairly high.
     wait(wait_milliseconds)
-    
 
-# The generated macro assumes you are on the Buy screen, Tier 3 is already selected,
-# and an item is highlighted.
+file_path = None
+if len(sys.argv) < 2:
+    file_path = get_nox_macro_interactive()
+else:
+    file_path = sys.argv[1]
+
+file = open(file_path, 'w')
+# The generated macro assumes you are on the Buy screen, Tier 3 is already selected, and an item is
+# highlighted.
 wait(500)
 
-# ===========================================================================================
-
-# You can edit the 3rd argument to each function below to adjust timings based on the speed
-# of your machine.  If your machine is very fast and Nox runs smoothly, you can lower some
-# of the numbers.  If you find that clicks are getting missed or registered at the wrong
-# time, you can raise some of the numbers.  You want them to be as low as possible while
-# still registering every click.  This will produce the fastest macro.
+# ==================================================================================================================
 
 # Buy 300 items
 for i in range(0, 300):
@@ -103,8 +164,8 @@ click(file, dismiss_results, 1000)
 # Exit back to Orvel world map
 click(file, exit_btn, 1000)
 
-# Re-enter the shop.  Delay should be a bit higher here since there's an animated
-# transition from Orvel to the forge screen that takes a little extra time.
+# Re-enter the shop.  Delay set to 2000 here since there's an animated transition
+# that takes a little extra time
 click(file, enter_forge_btn, 2000)
 
 # Click Use Shop button
@@ -113,3 +174,5 @@ click(file, use_shop_btn, 1000)
 # At this point we're back where we started and the macro can loop.
 
 file.close()
+
+print('File {0} successfully written.'.format(file_path))
