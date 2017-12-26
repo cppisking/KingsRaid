@@ -75,15 +75,23 @@ def do_input():
         return input()
     return raw_input()
 
-def prompt_user_for_int(message, min=None, max=None):
+def prompt_user_for_int(message, default=None, min=None, max=None):
     result = None
     while not is_integer(result, min=min, max=max):
         print(message, end='')
         result = do_input()
+        if default is not None and len(result) == 0:
+            result = default
     return int(result)
 
 def find_nox_install():
-    app_data = os.environ.get('LOCALAPPDATA', None)
+    app_data = None
+    if sys.platform == 'darwin':
+        user_dir = os.path.expanduser('~')
+        app_data = os.path.join(user_dir, 'Library', 'Application Support')
+    else:
+        app_data = os.environ.get('LOCALAPPDATA', None)
+
     if not app_data:
         print('Could not get local app data folder.  Exiting...')
         sys.exit(1)

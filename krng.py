@@ -6,6 +6,10 @@ import sys
 
 import nox
 
+macro_name = None
+file_path = None
+desc = None
+
 # These coordinate initial values are relative to a 1280x720 resolution, regardless of what
 # your actual resolution is.
 points = {
@@ -42,6 +46,30 @@ rects = {
 
 nox.initialize(points, rects)
 
+def confirm(properties):
+    global macro_name
+    global file_path
+    global desc
+
+    if properties is None:
+        properties = {}
+
+    print()
+    if macro_name:
+        print('Destination Macro Name: {0}'.format(macro_name))
+    print('Destination File: {0}'.format(file_path))
+    print('Selected Macro: {0}'.format(desc))
+    if len(properties) > 0:
+        print('Properties:')
+        for (k,v) in properties.items():
+            print('  {0}: {1}'.format(k, v))
+
+    print('Press Enter to confirm or Ctrl+C to cancel. ', end = '')
+    nox.do_input()
+
+    nox.wait(500)
+
+
 def gen_grindhouse():
     # The generated macro assumes you are on the Buy screen, Tier 3 is already selected, and an item is
     # highlighted.
@@ -51,10 +79,20 @@ def gen_grindhouse():
         "If you don't have at least this much inventory space the macro will de-sync.\n"
         "Number of items to purchase: ")
 
+    print()
+    buy_delay = nox.prompt_user_for_int("Enter the number of milliseconds between each click while purchasing\n"
+                                        "items.  A lower number will make the macro run faster, but could cause\n"
+                                        "the macro to get out of sync on slower machines.  If the macro doesn't\n"
+                                        "register clicks properly while buying items, run the generator again\n"
+                                        "and choose a higher number until you find what works.\n\n"
+                                        "Milliseconds (Default=275): ", default=275)
+
+    confirm({'Items to buy' : items_to_buy, 'Delay' : buy_delay})
+
     # Buy 300 items
     for i in range(0, items_to_buy):
-        nox.click_button('buy', 275)
-        nox.click_button('buy_confirm', 275)
+        nox.click_button('buy', buy_delay)
+        nox.click_button('buy_confirm', buy_delay)
 
     # Exit twice (to Orvel map)
     nox.click_button('exit', 1000)
@@ -89,6 +127,9 @@ def gen_grindhouse():
     nox.click_button('use_shop', 1000)
 
 def gen_raid_experimental():
+
+    confirm()
+
     # This macro can be started any time during a raid cycle.  You can be on the party
     # room screen, in the raid, on the loot screen, etc.  But you must *at least* have
     # your heroes ready on deck.
@@ -130,11 +171,15 @@ def gen_raid_experimental():
     nox.click_button('abandon_raid', 1000)
     
 def gen_raid():
+    confirm()
+
     nox.click_button('start_raid', 5000)
     nox.click_button('confirm_insufficient_members', 500)
     nox.click_button('abandon_raid', 5000)
 
 def gen_natural_stamina_farm():
+    confirm()
+
     nox.click_loc((935, 175), 500)
     nox.click_loc((1201, 509), 500)
     nox.click_loc((490, 410), 500)
@@ -143,7 +188,7 @@ def gen_natural_stamina_farm():
 macro_generators = [
     ("NPC Gear Purchasing and Grinding", gen_grindhouse),
     # ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
-    ("Raid Farming (Traditional)", gen_raid),
+    ("Raid Farming", gen_raid),
     ("Story Repeat (No Stamina Potion / Natural Stamina Regen)", gen_natural_stamina_farm)
     ]
 
@@ -157,16 +202,6 @@ macro_number = nox.prompt_user_for_int('Enter the macro you wish to generate: ',
 (macro_name, file_path) = nox.load_macro_file()
 
 (desc, fn) = macro_generators[macro_number - 1]
-
-print()
-if macro_name:
-    print('Destination Macro Name: {0}'.format(macro_name))
-print('Destination File: {0}'.format(file_path))
-print('Selected Macro: {0}'.format(desc))
-print('Press Enter to confirm or Ctrl+C to cancel. ', end = '')
-nox.do_input()
-
-nox.wait(500)
 
 # Generate the macro
 fn()
