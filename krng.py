@@ -131,6 +131,7 @@ def gen_raid_experimental():
     
 def gen_raid():
     nox.click_button('start_raid', 5000)
+    nox.click_button('confirm_insufficient_members', 500)
     nox.click_button('abandon_raid', 5000)
 
 def gen_natural_stamina_farm():
@@ -141,7 +142,7 @@ def gen_natural_stamina_farm():
 
 macro_generators = [
     ("NPC Gear Purchasing and Grinding", gen_grindhouse),
-    ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
+    # ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
     ("Raid Farming (Traditional)", gen_raid),
     ("Story Repeat (No Stamina Potion / Natural Stamina Regen)", gen_natural_stamina_farm)
     ]
