@@ -89,18 +89,22 @@ def find_nox_install():
     if sys.platform == 'darwin':
         user_dir = os.path.expanduser('~')
         app_data = os.path.join(user_dir, 'Library', 'Application Support')
-    else:
+    elif sys.platform == 'win32':
         app_data = os.environ.get('LOCALAPPDATA', None)
 
     if not app_data:
         print('Could not get local app data folder.  Exiting...')
         sys.exit(1)
+
     nox_folder = os.path.join(app_data, 'Nox', 'record')
+    if not os.path.exists(nox_folder):
+        nox_folder = os.path.join(app_data, 'Nox App Player', 'record')
+
     if not os.path.exists(nox_folder):
         print('Could not find Nox installation folder.  Exiting...')
         sys.exit(1)
     if not os.path.exists(os.path.join(nox_folder, 'records')):
-        print('Invalid Nox installation folder.  Exiting...')
+        print('Nox folder {0} does not contain a "records" file.  Exiting...'.format(nox_folder))
         sys.exit(1)
     return nox_folder
 
