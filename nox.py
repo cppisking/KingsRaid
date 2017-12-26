@@ -75,24 +75,36 @@ def do_input():
         return input()
     return raw_input()
 
-def prompt_user_for_int(message, min=None, max=None):
+def prompt_user_for_int(message, default=None, min=None, max=None):
     result = None
     while not is_integer(result, min=min, max=max):
         print(message, end='')
         result = do_input()
+        if default is not None and len(result) == 0:
+            result = default
     return int(result)
 
 def find_nox_install():
-    app_data = os.environ.get('LOCALAPPDATA', None)
+    app_data = None
+    if sys.platform == 'darwin':
+        user_dir = os.path.expanduser('~')
+        app_data = os.path.join(user_dir, 'Library', 'Application Support')
+    elif sys.platform == 'win32':
+        app_data = os.environ.get('LOCALAPPDATA', None)
+
     if not app_data:
         print('Could not get local app data folder.  Exiting...')
         sys.exit(1)
+
     nox_folder = os.path.join(app_data, 'Nox', 'record')
+    if not os.path.exists(nox_folder):
+        nox_folder = os.path.join(app_data, 'Nox App Player', 'record')
+
     if not os.path.exists(nox_folder):
         print('Could not find Nox installation folder.  Exiting...')
         sys.exit(1)
     if not os.path.exists(os.path.join(nox_folder, 'records')):
-        print('Invalid Nox installation folder.  Exiting...')
+        print('Nox folder {0} does not contain a "records" file.  Exiting...'.format(nox_folder))
         sys.exit(1)
     return nox_folder
 
