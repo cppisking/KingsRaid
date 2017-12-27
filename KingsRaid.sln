@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "KingsRaid", "KingsRaid.pyproj", "{FD3498AA-19CE-42A6-B65B-7F7B66C89908}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FD3498AA-19CE-42A6-B65B-7F7B66C89908}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD3498AA-19CE-42A6-B65B-7F7B66C89908}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4A0004E9-45A0-4EEC-A323-C0C8E33F2DE3}
+	EndGlobalSection
+EndGlobal
