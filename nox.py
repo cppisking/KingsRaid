@@ -14,9 +14,27 @@ button_rects = {}
 resolution = (1280,720)
 time = 0
 
+def do_input():
+    if sys.version_info >= (3,0):
+        return input()
+    return raw_input()
+
 def wait(amount):
     global time
     time = time + amount
+
+def error(message):
+    print(message)
+    do_input()
+    sys.exit(1)
+
+def repeat_generator_for(fn, seconds):
+    global time
+    initial = time
+    milliseconds = seconds * 1000
+
+    while time - initial < milliseconds:
+        fn()
 
 def click_loc(loc, wait_milliseconds):
     global file
@@ -70,19 +88,71 @@ def click_rects(rect_list, wait_milliseconds, dont_click = None):
     for r in rect_list:
         click_rect(r, wait_milliseconds, dont_click=dont_click)
 
-def do_input():
-    if sys.version_info >= (3,0):
-        return input()
-    return raw_input()
-
 def prompt_user_for_int(message, default=None, min=None, max=None):
     result = None
-    while not is_integer(result, min=min, max=max):
+    while True:
         print(message, end='')
         result = do_input()
+
         if default is not None and len(result) == 0:
             result = default
+            break
+
+        if not is_integer(result):
+            print('Value is not an integer.')
+            continue
+
+        result = int(result)
+        if min is not None and result < min:
+            print('Invalid value.  Must be at least {0}'.format(min))
+            continue
+
+        if max is not None and result > max:
+            print('Invalid value.  Must be no larger than {0}'.format(max))
+            continue
+
+        break
     return int(result)
+
+def prompt_choices(message, choices, default=None):
+    result = default
+    choice_str = '/'.join(choices)
+    default_str = ' (default={0})'.format(default) if default else ''
+
+    lower_choices = [x.lower() for x in choices]
+
+    message = '{0} ({1}){2}: '.format(message, choice_str, default_str)
+    while True:
+        print(message, end='')
+        input = do_input()
+        if len(input) == 0:
+            if default is not None:
+                return default
+            continue
+
+        input = input.lower()
+        if input in lower_choices:
+            return input
+
+    return None
+
+def prompt_user_yes_no(message, default=False):
+    result = default
+    message = "{0} (Y/N) (default={1}): ".format(message, "Y" if default else "N")
+    while True:
+        print(message, end='')
+        input = do_input()
+        if len(input) == 0:
+            result = default
+            break
+        input = input.lower()
+        if input == 'n':
+            result = False
+            break
+        if input == 'y':
+            result = True
+            break
+    return result
 
 def find_nox_install():
     app_data = None
@@ -93,28 +163,22 @@ def find_nox_install():
         app_data = os.environ.get('LOCALAPPDATA', None)
 
     if not app_data:
-        print('Could not get local app data folder.  Exiting...')
-        sys.exit(1)
+        error('Could not get local app data folder.  Exiting...')
 
     nox_folder = os.path.join(app_data, 'Nox', 'record')
     if not os.path.exists(nox_folder):
         nox_folder = os.path.join(app_data, 'Nox App Player', 'record')
 
     if not os.path.exists(nox_folder):
-        print('Could not find Nox installation folder.  Exiting...')
-        sys.exit(1)
+        error('Could not find Nox installation folder.  Exiting...')
+
     if not os.path.exists(os.path.join(nox_folder, 'records')):
-        print('Nox folder {0} does not contain a "records" file.  Exiting...'.format(nox_folder))
-        sys.exit(1)
+        error('Nox folder {0} does not contain a "records" file.  Exiting...'.format(nox_folder))
     return nox_folder
 
-def is_integer(s, min=None, max=None):
+def is_integer(s):
     try:
         n = int(s)
-        if min is not None and n < min:
-            return False
-        if max is not None and n > max:
-            return False
         return True
     except:
         pass
@@ -123,8 +187,7 @@ def is_integer(s, min=None, max=None):
 
 def select_macro_interactive(json_obj):
     if len(json_obj) == 0:
-        print('The records file contains no macros.  Record a dummy macro in Nox and try again.')
-        sys.exit(1)
+        error('The records file contains no macros.  Record a dummy macro in Nox and try again.')
     index = 0
     keys = list(json_obj.keys())
     if len(json_obj) > 1:
