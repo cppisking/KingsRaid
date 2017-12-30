@@ -14,6 +14,8 @@ print()
 if sys.version_info < (3,5):
     print('Error: This script requires Python 3.5 or higher.  Please visit '
           'www.python.org and install a newer version.')
+    print('Press any key to exit...')
+    input()
     sys.exit(1)
 
 macro_name = None
