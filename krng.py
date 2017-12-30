@@ -209,8 +209,6 @@ def do_generate_inventory_management_for_adventure(should_grind, should_sell, us
     if use_potion:
         nox.click_loc((688, 338), 2000)      # Stamina Potion.
         nox.click_loc((759, 558), 2000)      # Stamina Potion OK
-        nox.click_button('start_adventure', 3500)
-        nox.click_button('start_adventure', 3500)
 
 
 def generate_inventory_management_for_adventure():
@@ -271,6 +269,12 @@ def gen_natural_stamina_farm():
         if use_pot:
             nox.click_loc((688, 338), 500)      # Stamina Potion.
             nox.click_loc((759, 558), 500)      # Stamina Potion OK
+        else:
+            nox.click_loc((940, 190), 500)      # Close stamina pop-up
+
+            # No effect during battle or on victory screen, but if we get stuck in Get Ready
+            # for Battle screen after inventory management, this starts us again.
+            nox.click_button('start_adventure', 500)
 
     if inventory_management == -1:
         # If we don't need to manage inventory, just generate a simple macro that can loop forever.
@@ -296,30 +300,38 @@ def gen_natural_stamina_farm():
         # so initiate the process of clicking, grinding/selling, and getting back into the battle.
         do_generate_inventory_management_for_adventure(should_grind, should_sell, use_pot)
 
+try:
+    macro_generators = [
+        ("NPC Gear Purchasing and Grinding", gen_grindhouse),
+        # ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
+        ("AFK Raid (Member)", gen_raid),
+        ("AFK Raid (Leader)", gen_raid_leader),
+        ("Story Repeat w/ Natural Stamina Regen", gen_natural_stamina_farm),
+        ]
 
-macro_generators = [
-    ("NPC Gear Purchasing and Grinding", gen_grindhouse),
-    # ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
-    ("AFK Raid (Member)", gen_raid),
-    ("AFK Raid (Leader)", gen_raid_leader),
-    ("Story Repeat w/ Natural Stamina Regen", gen_natural_stamina_farm),
-    ]
+    print()
+    for (n,(desc,fn)) in enumerate(macro_generators):
+        print('{0}) {1}'.format(n+1, desc))
 
-print()
-for (n,(desc,fn)) in enumerate(macro_generators):
-    print('{0}) {1}'.format(n+1, desc))
+    macro_number = nox.prompt_user_for_int('Enter the macro you wish to generate: ',
+                                           min=1, max=len(macro_generators))
 
-macro_number = nox.prompt_user_for_int('Enter the macro you wish to generate: ',
-                                       min=1, max=len(macro_generators))
+    (macro_name, file_path) = nox.load_macro_file()
 
-(macro_name, file_path) = nox.load_macro_file()
+    (desc, fn) = macro_generators[macro_number - 1]
 
-(desc, fn) = macro_generators[macro_number - 1]
+    # Generate the macro
+    fn()
 
-# Generate the macro
-fn()
+    # At this point we're back where we started and the macro can loop.
+    nox.close()
 
-# At this point we're back where we started and the macro can loop.
-nox.close()
-
-print('File {0} successfully written.'.format(file_path))
+    print('File {0} successfully written.'.format(file_path))
+except SystemExit:
+    pass
+except:
+    print('Something happened.  Please report this and paste the below text.')
+    import traceback
+    traceback.print_exc()
+    print('Press any key to exit')
+    nox.do_input()
