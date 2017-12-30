@@ -39,7 +39,10 @@ points = {
     'use_shop' : (636,561),
     'abandon_raid' : (848, 590),
     'start_raid' : (1183, 624),
-    'start_adventure' : (1100, 660),
+
+    # x coordinate here is very precise so as to click the one unused pixel between
+    # the hero's S1 and S2 abilities.
+    'start_adventure' : (1055, 660),
     'stam_potion_select' : (641,379),
     'stam_potion_confirm' : (635,546),
     'confirm_insufficient_members' : (635,546)
