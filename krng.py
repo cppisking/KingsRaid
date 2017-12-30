@@ -11,6 +11,11 @@ print('By: cpp (Reddit: u/cpp_is_king, Discord: @cpp#0120)')
 print('Paypal: cppisking@gmail.com')
 print()
 
+if sys.version_info < (3,5):
+    print('Error: This script requires Python 3.5 or higher.  Please visit '
+          'www.python.org and install a newer version.')
+    sys.exit(1)
+
 macro_name = None
 file_path = None
 desc = None
@@ -146,7 +151,7 @@ def gen_grindhouse():
 
     # Re-enter the shop.  Delay set to 2500 here since there's an animated transition
     # that takes a little extra time
-    nox.click_button('enter_node', 2500)
+    nox.click_button('enter_node', 5000)
 
     # Click Use Shop button
     nox.click_button('use_shop', 1500)

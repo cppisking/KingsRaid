@@ -15,9 +15,7 @@ resolution = (1280,720)
 time = 0
 
 def do_input():
-    if sys.version_info >= (3,0):
-        return input()
-    return raw_input()
+    return input()
 
 def wait(amount):
     global time
@@ -165,16 +163,19 @@ def find_nox_install():
     if not app_data:
         error('Could not get local app data folder.  Exiting...')
 
-    nox_folder = os.path.join(app_data, 'Nox', 'record')
+    nox_folder = os.path.join(app_data, 'Nox')
     if not os.path.exists(nox_folder):
-        nox_folder = os.path.join(app_data, 'Nox App Player', 'record')
+        nox_folder = os.path.join(app_data, 'Nox App Player')
 
     if not os.path.exists(nox_folder):
-        error('Could not find Nox installation folder.  Exiting...')
+        error('Could not find Nox local app data folder.  Exiting...')
 
-    if not os.path.exists(os.path.join(nox_folder, 'records')):
-        error('Nox folder {0} does not contain a "records" file.  Exiting...'.format(nox_folder))
-    return nox_folder
+    nox_record_folder = os.path.join(nox_folder, 'record')
+    nox_records_file = os.path.join(nox_record_folder, 'records')
+    if not os.path.exists(nox_records_file):
+        error('Missing or invalid Nox macro folder.  Record an empty macro via the Nox UI then run this script again.')
+
+    return nox_record_folder
 
 def is_integer(s):
     try:
