@@ -21,6 +21,7 @@ args = None
 creature_by_index = None
 creature_by_name = None
 skills_by_index = None
+skill_level_factors = None
 indent_level = 0
 
 def print_line(message):
@@ -49,6 +50,13 @@ def parse_args():
     parser.add_argument('--hero', type=str, help='Limit dumping to the specified hero (e.g. Kasel)')
     parser.add_argument('--books', type=str, help='Assume skills have the specified book upgrades (e.g. --books=1,3,2,1)')
     return parser.parse_args()
+
+def max_numbered_key(obj, prefix):
+    indices = set(map(lambda x : int(x[-1]),
+                                filter(lambda x : x.startswith(prefix), obj.keys())))
+    if len(indices) == 0:
+        return None
+    return max(indices)
 
 def update_table(json_obj, indexes):
     for obj in json_obj:
@@ -88,18 +96,39 @@ def load_skills_table():
         if not os.path.exists(path):
             break
 
+def generate_factors(obj):
+    max_factor = max_numbered_key(obj, 'Factor')
+    assert(max_factor is not None)
+
+    result = {}
+    for x in range(1, max_factor+1):
+        key_name = 'Factor{0}'.format(x)
+        if key_name in obj:
+            result[x] = obj[key_name]
+    return result
+
+def load_skill_level_factors_table():
+    print('Loading skill level factors...')
+    global skill_level_factors
+
+    skill_level_factors = {}
+    path = os.path.join(args.json_path, 'SkillLevelFactorTable.json')
+    content = decode_file(path)
+    json_obj = json.loads(content)
+    for obj in json_obj:
+        skill_level_factors[obj['Level']] = generate_factors(obj)
+    return
+
 def generate_skill_operations(skill_obj):
-    operation_indices = set(map(lambda x : int(x[-1]),
-                                filter(lambda x : x.startswith('Operation'), skill_obj.keys())))
     def generate_one_operation(index):
         op_fields = list(filter(lambda x : x.startswith('Operation') and x.endswith(str(index)), skill_obj.keys()))
         d = { x[len('Operation'):-1] : skill_obj[x] for x in op_fields }
         return None if len(d) == 0 else d
 
-    if len(operation_indices) == 0:
+    max_operation = max_numbered_key(skill_obj, 'Operation')
+    if max_operation is None:
         return []
 
-    max_operation = max(operation_indices)
     return [generate_one_operation(x) for x in range(1, max_operation+1)]
 
 def format_skill_operation_key(operation, key, default=None):
@@ -108,46 +137,80 @@ def format_skill_operation_key(operation, key, default=None):
     value = operation[key]
     return str(value)
 
+def dump_default_operation(operation, type):
+    value_str = format_skill_operation_key(operation, 'Value')
+    target_type_str = format_skill_operation_key(operation, 'TargetType', default='null target')
+    value_factors_str = format_skill_operation_key(operation, 'ValueFactor')
+
+    type = type + '({0})'.format(target_type_str)
+    if value_str:
+        type = type + ', values = {0}'.format(value_str)
+    if value_factors_str:
+        type = type + ', factors = {0}'.format(value_factors_str)
+    suffix = type
+
+    operation.pop('Value', None)
+    operation.pop('TargetType', None)
+    operation.pop('ValueFactor', None)
+    return suffix
+
+def dump_get_damage_r(operation, type : str):
+    global skill_level_factors
+    values = operation['Value']
+    prefix = "physical " if "Physical" in type else "Magical "
+    if len(values) == 1:
+        formula = 'ATK * {0}'.format(values[0])
+    else:
+        v1 = float(values[0]) / 1000.0
+        term1 = 'Floor[ATK * {0}]'.format(v1)
+
+        factors = operation['ValueFactor']
+        factor_value = skill_level_factors[80][int(factors[2])]
+        term2 = int(values[1]) + 8 * int(float(factor_value) * float(factors[3]) / 1000.0)
+        formula = term1 + ' + ' + str(term2)
+    target_type = operation['TargetType']
+    operation.pop('TargetType', None)
+    operation.pop('Value', None)
+    operation.pop('ValueFactor', None)
+    return '{0}({1}), DMG = {2}'.format(type, target_type, formula)
+
+
 def dump_one_skill_operation(index, operation):
     prefix = '[{0}]: '.format(index)
     suffix = '(null)'
-    if operation:
-        type_str = format_skill_operation_key(operation, 'Type')
-        if type_str:
-            value_str = format_skill_operation_key(operation, 'Value')
-            target_type_str = format_skill_operation_key(operation, 'TargetType', default='null target')
-            value_factors_str = format_skill_operation_key(operation, 'ValueFactor')
+    if not operation:
+        print_line('{0}(null)'.format(prefix))
+        return
 
-            type_str = type_str + '({0})'.format(target_type_str)
-            if value_str:
-                type_str = type_str + ', values = {0}'.format(value_str)
-            if value_factors_str:
-                type_str = type_str + ', factors = {0}'.format(value_factors_str)
-            suffix = type_str
+    op_copy = copy.deepcopy(operation)
+
+    type_str = format_skill_operation_key(op_copy, 'Type')
+    op_copy.pop('Type', None)
+    operation_handlers = {
+        'GetPhysicalDamageR' : dump_get_damage_r,
+        'GetMagicalDamageR' : dump_get_damage_r
+        }
+
+    if type_str:
+        if type_str in operation_handlers:
+            suffix = operation_handlers[type_str](op_copy, type_str)
+        else:
+            suffix = dump_default_operation(op_copy, type_str)
     print_line('{0}{1}'.format(prefix, suffix))
 
-    if operation:
-        # Make a copy of operation and remove all the keys we know about so we can format the "extra" keys
-        op_copy = copy.deepcopy(operation)
-        op_copy.pop('Value', None)
-        op_copy.pop('Type', None)
-        op_copy.pop('TargetType', None)
-        op_copy.pop('ValueFactor', None)
+    def should_dump(op_key_value):
+        k, v = op_key_value
+        if k == 'ConditionType' and v == 'None':
+            return False
+        return True
 
-        def should_dump(op_key_value):
-            k, v = op_key_value
-            if k == 'ConditionType' and v == 'None':
-                return False
-            return True
-
-        op_list = [op_key_value for op_key_value in op_copy.items() if should_dump(op_key_value)]
-        groups_of_3 = list(zip(*(iter(op_list),) * 3))
-        indent(5)
-        for group in groups_of_3:
-            ((k1, v1), (k2, v2), (k3, v3)) = group
-            print_line('{0}={1}, {2}={3}, {4}={5}'.format(k1, str(v1), k2, str(v2), k3, str(v3)))
-        indent(-5)
-    pass
+    op_list = [op_key_value for op_key_value in op_copy.items() if should_dump(op_key_value)]
+    groups_of_3 = list(zip(*(iter(op_list),) * 3))
+    indent(5)
+    for group in groups_of_3:
+        ((k1, v1), (k2, v2), (k3, v3)) = group
+        print_line('{0}={1}, {2}={3}, {4}={5}'.format(k1, str(v1), k2, str(v2), k3, str(v3)))
+    indent(-5)
 
 def format_skill_header(skill_obj):
     attr = skill_obj['AttrType']
@@ -155,6 +218,10 @@ def format_skill_header(skill_obj):
     components = []
     if attr != 'None':
         components.append(attr.lower())
+    if 'TriggerType' in skill_obj:
+        trigger = skill_obj['TriggerType']
+        if trigger != 'None' and trigger != 'NextSkill':
+            components.append('trigger = {0}'.format(trigger))
     if 'DurationTimeMs' in skill_obj:
         duration = skill_obj['DurationTimeMs']
         components.append('duration = {0}'.format(str(duration)))
@@ -207,6 +274,7 @@ def dump_heroes():
 def main():
     load_creatures_table()
     load_skills_table()
+    load_skill_level_factors_table()
 
     dump_heroes()
 
