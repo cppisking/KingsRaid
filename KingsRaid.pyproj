@@ -5,13 +5,16 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{fd3498aa-19ce-42a6-b65b-7f7b66c89908}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>krng.py</StartupFile>
-    <SearchPath />
+    <StartupFile>krjs.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <CommandLineArguments>--json_path="C:\Users\zturn\Documents\King's Raid\TableData - 12-27-2017\Decrypted"</CommandLineArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -19,6 +22,9 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="krjs.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="krng.py" />
     <Compile Include="nox.py" />
   </ItemGroup>
