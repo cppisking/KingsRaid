@@ -47,7 +47,8 @@ def decode_file(path):
 def parse_args():
     parser = argparse.ArgumentParser(description='Kings Raid Json Dumper.')
     parser.add_argument('--json_path', type=str, help='The folder containing json files')
-    parser.add_argument('--hero', type=str, help='Limit dumping to the specified hero (e.g. Kasel)')
+    parser.add_argument('--heros', action='store_true', default=False, help='Dump Hero Skills')
+    parser.add_argument('--hero', type=str, help='When --heros is specified, limit dumping to the specified hero (e.g. Kasel)')
     parser.add_argument('--books', type=str, help='Assume skills have the specified book upgrades (e.g. --books=1,3,2,1)')
     return parser.parse_args()
 
@@ -154,25 +155,53 @@ def dump_default_operation(operation, type):
     operation.pop('ValueFactor', None)
     return suffix
 
+def get_operation_value(values, factors, index, default):
+    if len(values) <= index:
+        return 0
+
+    global skill_level_factors
+    if values[index][0] == '$':
+        return values[index]
+
+    if factors is None:
+        return 0
+    fi = index*2
+    fi2 = index*2 + 1
+    if len(factors) <= fi2:
+        return 0
+
+    # Not sure what the deal is with this, but special case it for now.
+    if int(factors[fi]) == 0 and int(factors[fi2]) == 0:
+        return float(values[index]) / 1000.0
+
+    level_table = skill_level_factors[80]
+
+    level_factor_index = int(factors[fi])
+    skill_scale_factor = factors[fi2]
+    level_scale_factor = level_table[level_factor_index]
+    result = 8 * float(level_scale_factor) * float(skill_scale_factor)
+    return float(result) / 1000.0
+
 def dump_get_damage_r(operation, type : str):
     global skill_level_factors
     values = operation['Value']
-    prefix = "physical " if "Physical" in type else "Magical "
-    if len(values) == 1:
+    prefix = "physical" if "Physical" in type else "magical"
+    if not 'ValueFactor' in operation:
         formula = 'ATK * {0}'.format(values[0])
     else:
-        v1 = float(values[0]) / 1000.0
-        term1 = 'Floor[ATK * {0}]'.format(v1)
-
         factors = operation['ValueFactor']
-        factor_value = skill_level_factors[80][int(factors[2])]
-        term2 = int(values[1]) + 8 * int(float(factor_value) * float(factors[3]) / 1000.0)
-        formula = term1 + ' + ' + str(term2)
+        v1 = get_operation_value(values, factors, 0, 0)
+        v2 = get_operation_value(values, factors, 1, 0)
+        if len(values) >= 2:
+            if values[1][0] != '$':
+                v2 = int(v2 + int(values[1]))
+
+        formula = 'Floor[ATK * {0}] + {1}'.format(v1, v2)
     target_type = operation['TargetType']
     operation.pop('TargetType', None)
     operation.pop('Value', None)
     operation.pop('ValueFactor', None)
-    return '{0}({1}), DMG = {2}'.format(type, target_type, formula)
+    return '{0} DMG = {1}'.format(prefix, formula)
 
 
 def dump_one_skill_operation(index, operation):
@@ -205,11 +234,15 @@ def dump_one_skill_operation(index, operation):
         return True
 
     op_list = [op_key_value for op_key_value in op_copy.items() if should_dump(op_key_value)]
-    groups_of_3 = list(zip(*(iter(op_list),) * 3))
     indent(5)
-    for group in groups_of_3:
-        ((k1, v1), (k2, v2), (k3, v3)) = group
-        print_line('{0}={1}, {2}={3}, {4}={5}'.format(k1, str(v1), k2, str(v2), k3, str(v3)))
+    while len(op_list) > 0:
+        components = []
+        for I in range(0, 3):
+            if len(op_list) == 0:
+                break
+            k, v = op_list.pop(0)
+            components.append('{0}={1}'.format(k, str(v)))
+        print_line(', '.join(components))
     indent(-5)
 
 def format_skill_header(skill_obj):
@@ -276,7 +309,8 @@ def main():
     load_skills_table()
     load_skill_level_factors_table()
 
-    dump_heroes()
+    if args.heros:
+        dump_heroes()
 
 try:
     args = parse_args()
