@@ -403,7 +403,7 @@ def dump_creature_star_grade_table():
             if k == 'Transcended':
                 continue
             print('{0:>13} | {1:>6} | {2:>6} | {3:>6} | {4:>6} | {5:>6} | {6:>6} | {7:>6} | {8:>6} | {9:>6} | {10:>6} |'.format(
-                k, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]))
+                k, str(v[0]), str(v[1]), str(v[2]), str(v[3]), str(v[4]), str(v[5]), str(v[6]), str(v[7]), str(v[8]), str(v[9])))
         pass
 
 def main():
