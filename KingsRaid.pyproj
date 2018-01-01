@@ -14,7 +14,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
-    <CommandLineArguments>--heros --json_path="C:\Users\zturn\Documents\King's Raid\TableData - 12-27-2017\Decrypted"</CommandLineArguments>
+    <CommandLineArguments>--star-grade-data --json_path="C:\Users\zturn\Documents\King's Raid\TableData - 12-27-2017\Decrypted"</CommandLineArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />

@@ -18,6 +18,7 @@ if sys.version_info < (3,5):
     sys.exit(1)
 
 args = None
+creature_star_grade_data = None
 creature_by_index = None
 creature_by_name = None
 skills_by_index = None
@@ -47,6 +48,7 @@ def decode_file(path):
 def parse_args():
     parser = argparse.ArgumentParser(description='Kings Raid Json Dumper.')
     parser.add_argument('--json_path', type=str, help='The folder containing json files')
+    parser.add_argument('--star-grade-data', action='store_true', default=False, help='Dump Creature Star Grade Data')
     parser.add_argument('--heros', action='store_true', default=False, help='Dump Hero Skills')
     parser.add_argument('--hero', type=str, help='When --heros is specified, limit dumping to the specified hero (e.g. Kasel)')
     parser.add_argument('--books', type=str, help='Assume skills have the specified book upgrades (e.g. --books=1,3,2,1)')
@@ -96,6 +98,88 @@ def load_skills_table():
         path = os.path.join(args.json_path, 'SkillTable{0}.json'.format(index))
         if not os.path.exists(path):
             break
+
+def is_playable_hero(creature):
+    return 'OpenType' in creature
+
+def load_creature_star_grade_data_table():
+    print('Loading creature star grade data...')
+    global creature_star_grade_data
+    global creature_by_index
+
+    def short_stat_name(stat):
+        mapping = {
+            "PhysicalCriticalChance" : "P. Crit",
+            "PhysicalDodgeChance" : "P. Dodge",
+            "PhysicalHitChance" : "P. Acc",
+            "PhysicalPiercePower" : "P. Pen",
+            "PhysicalToughness" : "P. Tough",
+            "MagicalCriticalChance" : "M. Crit",
+            "MagicalDodgeChance" : "M. Dodge",
+            "MagicalHitChance" : "M. Acc",
+            "MagicalPiercePower" : "M. Pen",
+            "MagicalToughness" : "M. Tough",
+            "AntiCcChance" : "CC Resist",
+            "MaxMp" : "MP",
+            "MpOnDamage" : "MP/DMG",
+            "MpOnAttack" : "MP/ATK",
+            "MpOnTime" : "MP/Time",
+            "MpOnKill" : "MP/Kill",
+            "MpRegenRatioM" : "MP Regen",
+            "AttackSpeed" : "ASpd",
+            "MoveSpeedMms" : "Move Spd",
+            "LevelStatFactor" : "Lvl Factor",
+            "MagicalBlockChance" : "M. Block",
+            "MagicalBlockPower" : "M. Block DEF",
+            "PhysicalBlockChance" : "P. Block",
+            "PhysicalBlockPower" : "P. Block DEF",
+            "PhysicalCriticalPower" : "P. Crit DMG",
+            "MagicalCriticalPower" : "M. Crit DMG",
+            "HpStealPower" : "Lifesteal",
+            "MagicalDefensePower" : "M. DEF",
+            "PhysicalDefensePower" : "P. DEF",
+            }
+        return mapping[stat]
+
+    path = os.path.join(args.json_path, 'CreatureStarGradeStatTable.json')
+    content = decode_file(path)
+    json_obj = json.loads(content)
+    creature_star_grade_data = {}
+
+    for obj in json_obj:
+        index = obj['CreatureIndex']
+        if not index in creature_by_index:
+            continue
+
+        star = obj['Star']
+        transcend = obj.get('Transcended', 0)
+        effective_star = star + transcend
+        table = None
+        if not index in creature_star_grade_data:
+            table = {}
+            creature_star_grade_data[index] = table
+        else:
+            table = creature_star_grade_data[index]
+
+        if effective_star in table:
+            print('Warning: Creature star grade ({0}, {1}, {2}) appears more than once.  Ignoring subsequent occurrences...'.format(index, star, transcend))
+            continue
+        for stat in obj:
+            if stat == 'CreatureIndex':
+                continue
+            if stat == 'Star':
+                continue
+            if stat == 'Transcended':
+                continue
+            stat_values = None
+            short_stat = short_stat_name(stat)
+            if not short_stat in table:
+                stat_values = [None] * 10
+                table[short_stat] = stat_values
+            else:
+                stat_values = table[short_stat]
+            stat_values[effective_star - 1] = obj[stat]
+    return
 
 def generate_factors(obj):
     max_factor = max_numbered_key(obj, 'Factor')
@@ -294,7 +378,7 @@ def dump_one_skill(name, index=None, book_mods=None):
 
 def dump_heroes():
     global creature_by_index
-    for hero in filter(lambda x : 'OpenType' in x, creature_by_index.values()):
+    for hero in filter(is_playable_hero, creature_by_index.values()):
         print_line(hero['CodeName']);
         indent(2)
         dump_one_skill('Auto Attack', index=hero['BaseSkillIndex']);
@@ -304,13 +388,35 @@ def dump_heroes():
             dump_one_skill("S{0}".format(i+1), index=hero[index_str], book_mods=hero[book_str])
         indent(-2)
 
+def dump_creature_star_grade_table():
+    global creature_star_grade_data
+    global creature_by_index
+    for index, data in creature_star_grade_data.items():
+        creature = creature_by_index[index]
+        print('Name: {0}'.format(creature['CodeName']))
+        print('              |   1*   |   2*   |   3*   |   4*   |   5*   |   T1   |   T2   |   T3   |   T4   |   T5   |')
+        for k, v in data.items():
+            if k == 'CreatureIndex':
+                continue
+            if k == 'Star':
+                continue
+            if k == 'Transcended':
+                continue
+            print('{0:>13} | {1:>6} | {2:>6} | {3:>6} | {4:>6} | {5:>6} | {6:>6} | {7:>6} | {8:>6} | {9:>6} | {10:>6} |'.format(
+                k, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]))
+        pass
+
 def main():
     load_creatures_table()
     load_skills_table()
     load_skill_level_factors_table()
+    load_creature_star_grade_data_table()
 
     if args.heros:
         dump_heroes()
+
+    if args.star_grade_data:
+        dump_creature_star_grade_table()
 
 try:
     args = parse_args()
