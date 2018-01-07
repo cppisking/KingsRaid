@@ -239,10 +239,7 @@ def load_macro_file():
     global file
     name = None
     file_path = None
-    if len(sys.argv) < 2:
-        (name, file_path) = get_nox_macro_interactive()
-    else:
-        file_path = sys.argv[1]
+    (name, file_path) = get_nox_macro_interactive()
 
     file = open(file_path, 'w')
     return (name, file_path)

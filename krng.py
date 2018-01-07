@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import argparse
 import json
 import os
 import sys
@@ -17,6 +18,10 @@ if sys.version_info < (3,5):
     print('Press any key to exit...')
     input()
     sys.exit(1)
+
+parser = argparse.ArgumentParser('Nox Macro Generator')
+parser.add_argument('--enable-developer-commands', action='store_true', default=False)
+args = parser.parse_args()
 
 macro_name = None
 file_path = None
@@ -102,20 +107,20 @@ def grind_or_sell_all(is_grind):
     # Grind
     button = 'grind' if is_grind else 'sell'
 
-    nox.click_button(button, 2500)
+    nox.click_button(button, 3500)
 
     # Grind all
-    nox.click_button('grind_all', 2500)
+    nox.click_button('grind_all', 3500)
 
     # Click the Grind button on the window that pops up
-    nox.click_button('grind_2', 2500)
+    nox.click_button('grind_2', 3500)
 
     # Confirmation
-    nox.click_button('grind_confirm', 2500)
+    nox.click_button('grind_confirm', 3500)
 
     if is_grind:
         # Click on the screen to get rid of the results
-        nox.click_button('dismiss_results', 2500)
+        nox.click_button('dismiss_results', 3500)
 
 def gen_grindhouse():
     # The generated macro assumes you are on the Buy screen, Tier 3 is already selected, and an item is
@@ -198,7 +203,7 @@ def prompt_inventory_management_properties():
 
     return (False, True)
 
-def do_generate_inventory_management_for_adventure(should_grind, should_sell, use_potion):
+def do_generate_inventory_management_for_adventure(should_grind, should_sell):
     # At this point we're at the victory screen.  We need to click the Inventory button on the
     # left side.  This involves a loading screen and can take quite some time, so wait 15 seconds.
     nox.click_loc((80, 230), 15000)
@@ -208,6 +213,7 @@ def do_generate_inventory_management_for_adventure(should_grind, should_sell, us
     # Exit back to Orvel map
     nox.click_button('exit', 3500)
 
+def re_enter_adventure(use_potion):
     # Re-enter the map.  Since there's a loading transition, this takes a little extra time.
     nox.click_button('enter_node', 3500)
 
@@ -217,16 +223,8 @@ def do_generate_inventory_management_for_adventure(should_grind, should_sell, us
 
     # The stamina window may have popped up.  Use a potion
     if use_potion:
-        nox.click_loc((688, 338), 2000)      # Stamina Potion.
         nox.click_loc((759, 558), 2000)      # Stamina Potion OK
 
-
-def generate_inventory_management_for_adventure():
-    print()
-
-    (should_grind, should_sell) = prompt_inventory_management_properties()
-
-    do_generate_inventory_management_for_adventure(should_grind, should_sell)
 
 def gen_natural_stamina_farm():
     print()
@@ -269,6 +267,14 @@ def gen_natural_stamina_farm():
         notes=notes)
 
     def generate_one_click_cycle():
+        # No effect during battle or on victory screen, but if we get stuck in Get Ready
+        # for Battle screen after inventory management, this starts us again.  Make sure
+        # to do this BEFORE the continue button, otherwise the continue button will click
+        # one of our heroes and remove them from the lineup.  By putting this click first
+        # it guarantees that we either enter the battle, or get the stamina window (in
+        # which case the click doesn't go through to the button underneath).
+        nox.click_button('start_adventure', 500)
+
         # Be careful with the x coordinate here so that it clicks in between items in the
         # inventory if your inventory is full.
         nox.click_loc((503, 352), 500)      # Continue (game pauses sometimes mid-battle)
@@ -277,14 +283,9 @@ def gen_natural_stamina_farm():
         nox.click_loc((572, 467), 500)      # Single Repeat button.  Careful not to click the button that
                                             # edits the count of stamina potions to use.
         if use_pot:
-            nox.click_loc((688, 338), 500)      # Stamina Potion.
             nox.click_loc((759, 558), 500)      # Stamina Potion OK
         else:
             nox.click_loc((940, 190), 500)      # Close stamina pop-up
-
-            # No effect during battle or on victory screen, but if we get stuck in Get Ready
-            # for Battle screen after inventory management, this starts us again.
-            nox.click_button('start_adventure', 500)
 
     if inventory_management == -1:
         # If we don't need to manage inventory, just generate a simple macro that can loop forever.
@@ -308,16 +309,24 @@ def gen_natural_stamina_farm():
 
         # At this point the Inventory button on the top left side of the victory should be clickable.
         # so initiate the process of clicking, grinding/selling, and getting back into the battle.
-        do_generate_inventory_management_for_adventure(should_grind, should_sell, use_pot)
+        do_generate_inventory_management_for_adventure(should_grind, should_sell)
+
+        # Re-enter the battle from the world map, using a potion if necessary
+        re_enter_adventure(use_pot)
 
 try:
     macro_generators = [
         ("NPC Gear Purchasing and Grinding", gen_grindhouse),
-        # ("Natural Stamina Regen Raid Farming (Non-Leader) (Experimental!!!)", gen_raid_experimental),
         ("AFK Raid (Member)", gen_raid),
         ("AFK Raid (Leader)", gen_raid_leader),
         ("Story Repeat w/ Natural Stamina Regen", gen_natural_stamina_farm),
         ]
+    if args.enable_developer_commands:
+        macro_generators.extend([
+            ("**DEV** Natural Stamina Regen Raid Farming (Non-Leader)", gen_raid_experimental),
+            ("**DEV** Re-enter adventure (potion)", lambda : re_enter_adventure(True)),
+            ("**DEV** Re-enter adventure (no potion)", lambda : re_enter_adventure(False)),
+        ])
 
     print()
     for (n,(desc,fn)) in enumerate(macro_generators):
