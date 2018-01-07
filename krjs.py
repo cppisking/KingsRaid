@@ -1,7 +1,9 @@
 import argparse
 import copy
+import itertools
 import os
 import json
+import re
 import sys
 import traceback
 
@@ -25,10 +27,15 @@ skills_by_index = None
 skill_level_factors = None
 indent_level = 0
 
-def print_line(message):
+def print_line(message, add_newline=True, is_continuation=False):
     global indent_level
-    print(' ' * indent_level, end = '')
-    print(message)
+    if not is_continuation:
+        print(' ' * indent_level, end = '')
+
+    if add_newline:
+        print(message)
+    else:
+        print(message, end='')
 
 def indent(amount):
     global indent_level
@@ -50,7 +57,10 @@ def parse_args():
     parser.add_argument('--json_path', type=str, help='The folder containing json files')
     parser.add_argument('--star-grade-data', action='store_true', default=False, help='Dump Creature Star Grade Data')
     parser.add_argument('--heros', action='store_true', default=False, help='Dump Hero Skills')
+    parser.add_argument('--auto-attacks', action='store_true', default=True, help='With --heros, dump auto attack info')
+    parser.add_argument('--skills', action='store_true', default=False, help='With --heros, dump skill info')
     parser.add_argument('--hero', type=str, help='When --heros is specified, limit dumping to the specified hero (e.g. Kasel)')
+    parser.add_argument('--style', type=str, default='verbose', choices=['verbose', 'brief'], help='Level of skill detail to display')
     parser.add_argument('--books', type=str, help='Assume skills have the specified book upgrades (e.g. --books=1,3,2,1)')
     return parser.parse_args()
 
@@ -154,12 +164,7 @@ def load_creature_star_grade_data_table():
         star = obj['Star']
         transcend = obj.get('Transcended', 0)
         effective_star = star + transcend
-        table = None
-        if not index in creature_star_grade_data:
-            table = {}
-            creature_star_grade_data[index] = table
-        else:
-            table = creature_star_grade_data[index]
+        table = creature_star_grade_data.setdefault(index, {})
 
         if effective_star in table:
             print('Warning: Creature star grade ({0}, {1}, {2}) appears more than once.  Ignoring subsequent occurrences...'.format(index, star, transcend))
@@ -173,11 +178,7 @@ def load_creature_star_grade_data_table():
                 continue
             stat_values = None
             short_stat = short_stat_name(stat)
-            if not short_stat in table:
-                stat_values = [None] * 10
-                table[short_stat] = stat_values
-            else:
-                stat_values = table[short_stat]
+            stat_values = table.setdefault(short_stat, [None] * 10)
             stat_values[effective_star - 1] = obj[stat]
     return
 
@@ -191,6 +192,28 @@ def generate_factors(obj):
         if key_name in obj:
             result[x] = obj[key_name]
     return result
+
+def generate_ticks(skill_obj, operations):
+    ticks = skill_obj.get('TickTimeValue', None)
+    if not ticks:
+        return [(0, operations)]
+    tick_expr = re.compile(r'(?P<t>[^\[]*)(?:\[(?P<op>.*)\])?')
+    def one_tick_operations(t):
+        match = tick_expr.match(t)
+        if not match:
+            print("The tick expression '{0}' for skill '{1}' is in an unrecognized format".format(t, skill_obj['Index']))
+            return None
+        time, op = match.group('t', 'op')
+        if op is None:
+            non_null_opers = list(filter(lambda x : x is not None, operations))
+            return (int(time), non_null_opers)
+
+        op_indices = list(map(lambda x : int(x) - 1, op.split(':')))
+        op_indices = list(filter(lambda x : x < len(operations) and operations[x], op_indices))
+        actions = list(map(lambda x : operations[x], op_indices))
+
+        return (int(time), actions)
+    return [one_tick_operations(t) for t in ticks]
 
 def load_skill_level_factors_table():
     print('Loading skill level factors...')
@@ -239,11 +262,26 @@ def dump_default_operation(operation, type):
     operation.pop('ValueFactor', None)
     return suffix
 
-def get_operation_value(values, factors, index, default):
+def get_operation_level_value(creature_index, star, trans, factor1, factor2):
+    global skill_level_factors
+    global creature_star_grade_data
+
+    sgd = creature_star_grade_data[creature_index]
+    lsf = float(sgd['Lvl Factor'][star + trans - 1]) / 1000.0
+
+    level_table = skill_level_factors[80]
+
+    level_factor_index = factor1
+    skill_scale_factor = factor2
+    level_scale_factor = level_table.get(level_factor_index, 0)
+    result = lsf * float(level_scale_factor) * float(skill_scale_factor)
+    return float(result)
+
+def get_operation_value(creature_index, star, trans, values, factors, index, default):
     if len(values) <= index:
         return 0
 
-    global skill_level_factors
+    # This is an expression, which we don't handle yet.
     if values[index][0] == '$':
         return values[index]
 
@@ -254,19 +292,11 @@ def get_operation_value(values, factors, index, default):
     if len(factors) <= fi2:
         return 0
 
-    # Not sure what the deal is with this, but special case it for now.
-    if int(factors[fi]) == 0 and int(factors[fi2]) == 0:
-        return float(values[index]) / 1000.0
+    level_value = get_operation_level_value(creature_index, star, trans, int(factors[fi]), int(factors[fi2]))
 
-    level_table = skill_level_factors[80]
+    return (float(values[index]) + level_value) / 1000.0
 
-    level_factor_index = int(factors[fi])
-    skill_scale_factor = factors[fi2]
-    level_scale_factor = level_table[level_factor_index]
-    result = 8 * float(level_scale_factor) * float(skill_scale_factor)
-    return float(result) / 1000.0
-
-def dump_get_damage_r(operation, type : str):
+def dump_get_damage_r(creature_index, star, trans, operation, type : str):
     global skill_level_factors
     values = operation['Value']
     prefix = "physical" if "Physical" in type else "magical"
@@ -274,13 +304,10 @@ def dump_get_damage_r(operation, type : str):
         formula = 'ATK * {0}'.format(values[0])
     else:
         factors = operation['ValueFactor']
-        v1 = get_operation_value(values, factors, 0, 0)
-        v2 = get_operation_value(values, factors, 1, 0)
-        if len(values) >= 2:
-            if values[1][0] != '$':
-                v2 = int(v2 + int(values[1]))
+        power = get_operation_value(creature_index, star, trans, values, factors, 0, 0)
+        level_factor = get_operation_value(creature_index, star, trans, values, factors, 1, 0)
 
-        formula = 'Floor[ATK * {0}] + {1}'.format(v1, v2)
+        formula = 'Floor[ATK * {0} + {1}]'.format(power, level_factor)
     target_type = operation['TargetType']
     operation.pop('TargetType', None)
     operation.pop('Value', None)
@@ -288,7 +315,8 @@ def dump_get_damage_r(operation, type : str):
     return '{0} DMG = {1}'.format(prefix, formula)
 
 
-def dump_one_skill_operation(index, operation):
+def dump_one_skill_operation(creature_index, star, trans, index, operation):
+    global args
     prefix = '[{0}]: '.format(index)
     suffix = '(null)'
     if not operation:
@@ -306,7 +334,7 @@ def dump_one_skill_operation(index, operation):
 
     if type_str:
         if type_str in operation_handlers:
-            suffix = operation_handlers[type_str](op_copy, type_str)
+            suffix = operation_handlers[type_str](creature_index, star, trans, op_copy, type_str)
         else:
             suffix = dump_default_operation(op_copy, type_str)
     print_line('{0}{1}'.format(prefix, suffix))
@@ -352,40 +380,108 @@ def format_skill_header(skill_obj):
         components.append('target {0}'.format(target_type))
     return ', '.join(components)
 
-def dump_one_skill(name, index=None, book_mods=None):
+def dump_one_skill(creature_index, star, trans, name, index=None, book_mods=None):
     global skills_by_index
-    skill_obj = skills_by_index[index]
-    print_line('Skill: {0} ({1})'.format(name, format_skill_header(skill_obj)))
-    operations = generate_skill_operations(skill_obj)
+    skill = skills_by_index[index]
+
+    def skill_absolute_time(skill):
+        acting_time = int(skill.get('ActingTimeMs', 0))
+        duration_time = sum(map(int, skill.get('DurationTimeMs', [0])))
+        return acting_time + duration_time
+
+    print_line('Skill: {0} [Duration = {1}]'.format(name, skill_absolute_time(skill)))
 
     indent(4)
-    for index, op in enumerate(operations):
-        dump_one_skill_operation(index, op)
 
-    phase = 1
-    while 'NextIndex' in skill_obj:
-        next_index = skill_obj['NextIndex']
-        skill_obj = skills_by_index[next_index]
-        print_line('-> phase {0}: {1}'.format(phase, format_skill_header(skill_obj)))
+    damaging_oper_types = ['GetPhysicalDamageR', 'GetMagicalDamageR', 'GetPhysicalDotR', 'GetMagicalDotR', 'GetStateDamageR']
+
+    def is_aoe(tick):
+        return 'RadiusMm' in tick
+
+    def damaging_tick_label(tick):
+        type = tick['Type']
+        assert(type in damaging_oper_types)
+        damage_type = 'P.DMG' if 'Physical' in type else 'M.DMG'
+        styles = []
+        if is_aoe(tick):
+            s = 'AOE'
+            if 'ExcludeTarget' in tick.get('Flags', []):
+                s = s + '-'
+            styles.append(s)
+        if 'Dot' in type:
+            styles.append('DoT')
+        style_str = '({0})'.format(','.join(styles)) if len(styles) > 0 else ''
+        return damage_type + style_str
+
+    def tick_scaling_formula(tick):
+        values = tick['Value']
+        if not 'ValueFactor' in tick:
+            value = values[0]
+            try:
+                value = float(value) / 1000.0
+            except:
+                pass
+            return 'ATK*{0}'.format(value)
+
+        factors = tick['ValueFactor']
+        power = get_operation_value(creature_index, star, trans, values, factors, 0, 0)
+        level_factor = get_operation_value(creature_index, star, trans, values, factors, 1, 0)
+
+        return 'ATK*{0}+{1}'.format(power, level_factor)
+
+    def format_one_damaging_tick(tick):
+        label = damaging_tick_label(tick)
+        scaling = tick_scaling_formula(tick)
+        return '{0}[{1}]'.format(label, scaling)
+
+    def format_tick_one_line(tick_operations):
+        do = list(filter(lambda x : x.get('Type', None) in damaging_oper_types, tick_operations))
+        if len(do) == 0:
+            return '[Non-damaging tick]'
+        formatted_ticks = [format_one_damaging_tick(x) for x in do]
+        return ' + '.join(formatted_ticks)
+
+    def dump_skill_attacks(atk_index, skill_obj):
+        indent(2)
+        id = skill_obj['Index']
+        print_line('Hit {0} (id {1}): '.format(atk_index, id), add_newline=False)
+
+        ilvl = 13 + len(str(id))
+        indent(ilvl)
         operations = generate_skill_operations(skill_obj)
+        ticks = generate_ticks(skill_obj, operations)
+        is_continuation = True
+        for t in enumerate(ticks):
+            index, time, ops = t[0], t[1][0], t[1][1]
+            print_line('[{0}] (t={1}): {2}'.format(index, time, format_tick_one_line(ops)), is_continuation=is_continuation)
+            is_continuation = False
+        indent(-ilvl)
+        indent(-2)
+        return
 
-        indent(12)
-        for index, op in enumerate(operations):
-            dump_one_skill_operation(index, op)
-        phase = phase + 1
-        indent(-12)
+    atk_index = 1
+    dump_skill_attacks(atk_index, skill)
+
+    while 'NextIndex' in skill:
+        atk_index = atk_index + 1
+        skill = skills_by_index[skill['NextIndex']]
+        dump_skill_attacks(atk_index, skill)
+
     indent(-4)
 
 def dump_heroes():
     global creature_by_index
+    global args
     for hero in filter(is_playable_hero, creature_by_index.values()):
         print_line(hero['CodeName']);
         indent(2)
-        dump_one_skill('Auto Attack', index=hero['BaseSkillIndex']);
-        for i in range(4):
-            index_str = 'SkillIndex{0}'.format(i+1)
-            book_str = 'SkillExtend{0}'.format(i+1)
-            dump_one_skill("S{0}".format(i+1), index=hero[index_str], book_mods=hero[book_str])
+        if args.auto_attacks:
+            dump_one_skill(hero['Index'], 5, 5, 'Auto Attack', index=hero['BaseSkillIndex']);
+        if args.skills:
+            for i in range(4):
+                index_str = 'SkillIndex{0}'.format(i+1)
+                book_str = 'SkillExtend{0}'.format(i+1)
+                dump_one_skill(hero['Index'], 5, 5, "S{0}".format(i+1), index=hero[index_str], book_mods=hero[book_str])
         indent(-2)
 
 def dump_creature_star_grade_table():
@@ -421,6 +517,10 @@ def main():
 try:
     args = parse_args()
     main()
+except SystemExit as e:
+    if e.code != 0:
+        print('An unknown error occurred.  Please report this bug.')
+        traceback.print_exc()
 except:
     print('An unknown error occurred.  Please report this bug.')
     traceback.print_exc()
